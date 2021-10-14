@@ -38,7 +38,7 @@ def get_prod_proportion(file: str,
     df_dk = df[df['PriceArea'] == dist_area]
 
     df_dk = df_dk[df_dk['HourUTC'] >= start_date]
-    df_dk = df_dk[df_dk['HourUTC'] <= end_date]
+    df_dk = df_dk[df_dk['HourUTC'] < end_date]
 
     df_group_dk = df_dk.groupby(['HourUTC', 'ProductionGroup']).sum()
 

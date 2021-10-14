@@ -27,7 +27,7 @@ def get_co2_reduction(start_date: dt.datetime,
         .filter(["HourUTC", "PriceArea", "IsVe", "Share"])
     )
     share_by_type = share_by_type[share_by_type['HourUTC'] >= start_date]
-    share_by_type = share_by_type[share_by_type['HourUTC'] <= end_date]
+    share_by_type = share_by_type[share_by_type['HourUTC'] < end_date]
     share_by_type = share_by_type[share_by_type['PriceArea'] == price_area]
 
     emission_by_hour = (
@@ -40,7 +40,7 @@ def get_co2_reduction(start_date: dt.datetime,
     emission_by_hour = emission_by_hour[
         emission_by_hour['HourUTC'] >= start_date]
     emission_by_hour = emission_by_hour[
-        emission_by_hour['HourUTC'] <= end_date]
+        emission_by_hour['HourUTC'] < end_date]
     emission_by_hour = emission_by_hour[
         emission_by_hour['PriceArea'] == price_area]
 
@@ -55,7 +55,7 @@ def get_co2_reduction(start_date: dt.datetime,
     consumption_by_hour = consumption_by_hour[
         consumption_by_hour['HourUTC'] >= start_date]
     consumption_by_hour = consumption_by_hour[
-        consumption_by_hour['HourUTC'] <= end_date]
+        consumption_by_hour['HourUTC'] < end_date]
     consumption_by_hour = consumption_by_hour[
         consumption_by_hour['PriceArea'] == price_area]
 

@@ -4,9 +4,11 @@ import dash_bootstrap_components as dbc
 from dash import Input, Output, State, dcc, html
 from datetime import date
 import plotly.express as px
+import plotly.graph_objs as go
 import pandas as pd
 import numpy as np
 from get_mean_per_prodtype import get_prod_proportion
+from get_co2_equiv import get_co2_reduction
 
 
 VALID_YEARS = [2017, 2018, 2019, 2020]
@@ -52,22 +54,22 @@ form_content = html.Div([
         dbc.Col([
             html.H3("Opregulering", className="display-6"),
             dbc.InputGroup([
-                dbc.Input(placeholder="Tilgængelige", type="number", min=0, step=0.1),
+                dbc.Input(id="up-available", placeholder="Tilgængelige", type="number", min=0, step=0.1),
                 dbc.InputGroupText("MW")
             ], className="mb-1"),
             dbc.InputGroup([
-                dbc.Input(placeholder="Aktiveret", type="number", min=0, max=100, step=0.1),
+                dbc.Input(id="up-activated", placeholder="Aktiveret", type="number", min=0, max=100, step=0.1),
                 dbc.InputGroupText("%")
             ])
         ], md=6, lg=3),
         dbc.Col([
             html.H3("Nedregulering", className="display-6"),
             dbc.InputGroup([
-                dbc.Input(placeholder="Tilgængelige", type="number", min=0, step=0.1),
+                dbc.Input(id="down-available", placeholder="Tilgængelige", type="number", min=0, step=0.1),
                 dbc.InputGroupText("MW")
             ], className="mb-1"),
             dbc.InputGroup([
-                dbc.Input(placeholder="Aktiveret", type="number", min=0, max=100, step=0.1),
+                dbc.Input(id="down-activated", placeholder="Aktiveret", type="number", min=0, max=100, step=0.1),
                 dbc.InputGroupText("%")
             ])
         ], md=6, lg=3)
@@ -84,7 +86,7 @@ results_content = html.Div(
 app.layout = dbc.Container(
     [
         html.Div([
-            html.H1("FlexFordel", className="display-4"),
+            html.H1([html.Img(src=app.get_asset_url("Balance.png"), style={"width": "80px", "margin-right": "10px"}), "FlexFordel"], className="display-4"),
             html.P("Beregn dit bidrag til den grønne omstilling.", className="lead"),
         ], className="my-4 text-center"),
         form_content,
@@ -110,11 +112,11 @@ app.layout = dbc.Container(
     State("dropdown-area", "value")
 )
 def update_graph_pie(n_clicks, date_start, date_end, area):
-    if date_start is None or date_end is None:
+    if date_start is None or date_end is None or area is None:
         return EMPTY_GRAPH
 
     df = get_prod_proportion(
-        "declarationcoveragehour.parquet",
+        "data/declarationcoveragehour.parquet",
         date_start,
         date_end,
         area
@@ -139,27 +141,47 @@ def update_graph_pie(n_clicks, date_start, date_end, area):
     Output("graph-reduction", "figure"),
     Input("button-submit", "n_clicks"),
     State("date-period", "start_date"),
-    State("date-period", "end_date")
+    State("date-period", "end_date"),
+    State("dropdown-area", "value"),
+    State("up-available", "value"),
+    State("up-activated", "value"),
+    State("down-available", "value"),
+    State("down-activated", "value")
 )
-def update_graph_reduction(n_clicks, date_start, date_end):
-    if date_start is None or date_end is None:
+def update_graph_reduction(n_clicks, date_start, date_end, area, up_available, up_activated, down_available, down_activated):
+    if date_start is None or date_end is None or area is None:
         return EMPTY_GRAPH
+    
+    up_available = up_available or 0
+    up_activated = up_activated or 0
+    down_available = down_available or 0
+    down_activated = down_activated or 0
 
     date_start = pd.Timestamp(date_start, tz="UTC")
     date_end = pd.Timestamp(date_end, tz="UTC")
     dates = pd.date_range(date_start, date_end+pd.offsets.Day(), freq="D", closed="left")
 
-    return px.bar(
-        x=dates,
-        y=np.random.randint(10, 50, len(dates)),
-        title="Estimeret besparelse",
-        labels={
-            "x": "Dag",
-            "y": "Gram CO2"
-        },
-        height=GRAPH_HEIGHT
+    data = get_co2_reduction(date_start, date_end, area)
+    data = data.resample("D").mean()
+
+    total_up = up_available * 1000 * up_activated / 100 * 24
+    total_down = down_available * 1000 * down_activated / 100 * 24
+
+    reduced_up = data["CO2Diff"] * total_up / 1000
+    reduced_down = data["CO2Equiv"] * total_down / 1000
+
+    fig = go.Figure(data=[
+        go.Bar(name="Op", x=data.index, y=reduced_up),
+        go.Bar(name="Ned", x=data.index, y=reduced_down)
+    ])
+    fig.update_layout(
+        barmode="stack",
+        height=GRAPH_HEIGHT,
+        title={"text": "Din besparelse"},
+        yaxis_title="Kg CO2 pr. dag"
     )
+    return fig
 
 
 if __name__ == "__main__":
-    app.run_server(host="0.0.0.0", port=4000, debug=True)
+    app.run_server(host="0.0.0.0", port=4000, debug=False)
