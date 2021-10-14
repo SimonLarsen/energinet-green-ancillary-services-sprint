@@ -83,7 +83,7 @@ def get_co2_reduction(start_date: dt.datetime,
     df = df.assign(CO2Diff=lambda df: df.CO2EquivNonVE - df.CO2Equiv)
     df = df.set_index('HourUTC')
 
-    df_co2_diff = df['CO2Diff']
+    df_co2_diff = df[['CO2Diff', 'CO2Equiv']]
 
     return df_co2_diff
 
