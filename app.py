@@ -1,11 +1,12 @@
 import dash
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
-from dash import Input, Output, dcc, html
+from dash import Input, Output, State, dcc, html
 from datetime import date
 import plotly.express as px
 import pandas as pd
 import numpy as np
+from get_mean_per_prodtype import get_prod_proportion
 
 
 VALID_YEARS = [2017, 2018, 2019, 2020]
@@ -16,7 +17,7 @@ EMPTY_GRAPH = {
         "yaxis": {"visible": False},
         "paper_bgcolor": "white",
         "plot_bgcolor": "white",
-        "height": 16
+        "height": 48
     }
 }
 GRAPH_HEIGHT = 500
@@ -36,7 +37,7 @@ form_content = html.Div([
                 ],
                 clearable=False
             )
-        ]),
+        ], md=6, lg=3),
         dbc.Col([
             html.H3("Periode", className="display-6"),
             dcc.DatePickerRange(
@@ -47,36 +48,36 @@ form_content = html.Div([
                 updatemode="bothdates",
                 minimum_nights=7
             )
-        ]),
+        ], md=6, lg=3),
         dbc.Col([
             html.H3("Opregulering", className="display-6"),
             dbc.InputGroup([
                 dbc.Input(placeholder="Tilgængelige", type="number", min=0, step=0.1),
                 dbc.InputGroupText("MW")
-            ]),
+            ], className="mb-1"),
             dbc.InputGroup([
                 dbc.Input(placeholder="Aktiveret", type="number", min=0, max=100, step=0.1),
                 dbc.InputGroupText("%")
             ])
-        ]),
+        ], md=6, lg=3),
         dbc.Col([
             html.H3("Nedregulering", className="display-6"),
             dbc.InputGroup([
                 dbc.Input(placeholder="Tilgængelige", type="number", min=0, step=0.1),
                 dbc.InputGroupText("MW")
-            ]),
+            ], className="mb-1"),
             dbc.InputGroup([
                 dbc.Input(placeholder="Aktiveret", type="number", min=0, max=100, step=0.1),
                 dbc.InputGroupText("%")
             ])
-        ])
+        ], md=6, lg=3)
     ])
 ])
 
 results_content = html.Div(
     dbc.Row([
-        dbc.Col(dcc.Loading(dcc.Graph(id="graph-pie"))),
-        dbc.Col(dcc.Loading(dcc.Graph(id="graph-reduction")))
+        dbc.Col(dcc.Loading(dcc.Graph(id="graph-pie")), lg=5),
+        dbc.Col(dcc.Loading(dcc.Graph(id="graph-reduction")), lg=7)
     ])
 )
 
@@ -103,32 +104,44 @@ app.layout = dbc.Container(
 
 @app.callback(
     Output("graph-pie", "figure"),
-    Input("date-period", "start_date"),
-    Input("date-period", "end_date")
+    Input("button-submit", "n_clicks"),
+    State("date-period", "start_date"),
+    State("date-period", "end_date"),
+    State("dropdown-area", "value")
 )
-def update_graph_pie(date_start, date_end):
+def update_graph_pie(n_clicks, date_start, date_end, area):
     if date_start is None or date_end is None:
         return EMPTY_GRAPH
 
-    df = pd.DataFrame(dict(
-        names = ["Kul", "Olie", "Naturgas"],
-        values = np.random.randint(10, 50, 3)
-    ))
-    return px.pie(
+    df = get_prod_proportion(
+        "declarationcoveragehour.parquet",
+        date_start,
+        date_end,
+        area
+    )
+    fig = px.pie(
         df,
-        values="values",
-        names="names",
+        values="Share",
+        names="ProductionGroup",
         title="Du erstatter",
+        labels={
+            "ProductionGroup": "Produktionstype",
+            "Share": "Andel"
+        },
         height=GRAPH_HEIGHT
     )
+    fig.update_traces(textposition="inside", textinfo="percent+label")
+    fig.update(layout_showlegend=False)
+    return fig
 
 
 @app.callback(
     Output("graph-reduction", "figure"),
-    Input("date-period", "start_date"),
-    Input("date-period", "end_date")
+    Input("button-submit", "n_clicks"),
+    State("date-period", "start_date"),
+    State("date-period", "end_date")
 )
-def update_graph_reduction(date_start, date_end):
+def update_graph_reduction(n_clicks, date_start, date_end):
     if date_start is None or date_end is None:
         return EMPTY_GRAPH
 
@@ -136,13 +149,13 @@ def update_graph_reduction(date_start, date_end):
     date_end = pd.Timestamp(date_end, tz="UTC")
     dates = pd.date_range(date_start, date_end+pd.offsets.Day(), freq="D", closed="left")
 
-    return px.line(
+    return px.bar(
         x=dates,
         y=np.random.randint(10, 50, len(dates)),
         title="Estimeret besparelse",
         labels={
             "x": "Dag",
-            "y": "CO2"
+            "y": "Gram CO2"
         },
         height=GRAPH_HEIGHT
     )
