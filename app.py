@@ -22,8 +22,11 @@ EMPTY_GRAPH = {
         "height": 48
     }
 }
-GRAPH_HEIGHT = 500
+GRAPH_HEIGHT = 400
 
+PROD_TYPES = ["Kul", "Naturgas", "Atomkraft", "Olie", "Biomasse", "Affald", "Biogas"]
+ENERGINET_COLORS = ["#00A58D", "#09505D", "#FFD424", "#83CCD8", "#008A8B", "#F8AE3C", "#A0C1C2", "#9FCD91", "#CC493E"]
+PROD_COLOR_MAP = {t: c for t, c in zip(PROD_TYPES, ENERGINET_COLORS[1:8])}
 
 app = dash.Dash(external_stylesheets=[dbc.themes.LUMEN])
 
@@ -52,24 +55,24 @@ form_content = html.Div([
             )
         ], md=6, lg=3),
         dbc.Col([
-            html.H3("Opregulering", className="display-6"),
-            dbc.InputGroup([
-                dbc.Input(id="up-available", placeholder="Tilgængelige", type="number", min=0, step=0.1),
-                dbc.InputGroupText("MW")
-            ], className="mb-1"),
-            dbc.InputGroup([
-                dbc.Input(id="up-activated", placeholder="Aktiveret", type="number", min=0, max=100, step=0.1),
-                dbc.InputGroupText("%")
-            ])
+            html.H3("Type", className="display-6"),
+            dcc.Dropdown(
+                id="dropdown-type",
+                options=[
+                    {"label": "Opregulering", "value": "up"},
+                    {"label": "Nedregulering", "value": "down"}
+                ],
+                clearable=False
+            )
         ], md=6, lg=3),
         dbc.Col([
-            html.H3("Nedregulering", className="display-6"),
+            html.H3("Produkt", className="display-6"),
             dbc.InputGroup([
-                dbc.Input(id="down-available", placeholder="Tilgængelige", type="number", min=0, step=0.1),
+                dbc.Input(id="input-available", placeholder="Tilgængelige", type="number", min=0, step=0.1),
                 dbc.InputGroupText("MW")
             ], className="mb-1"),
             dbc.InputGroup([
-                dbc.Input(id="down-activated", placeholder="Aktiveret", type="number", min=0, max=100, step=0.1),
+                dbc.Input(id="input-activated", placeholder="Aktiveret", type="number", min=0, max=100, step=0.1),
                 dbc.InputGroupText("%")
             ])
         ], md=6, lg=3)
@@ -125,15 +128,20 @@ def update_graph_pie(n_clicks, date_start, date_end, area):
         df,
         values="Share",
         names="ProductionGroup",
+        color="ProductionGroup",
         title="Du erstatter",
         labels={
             "ProductionGroup": "Produktionstype",
             "Share": "Andel"
         },
+        color_discrete_map=PROD_COLOR_MAP,
         height=GRAPH_HEIGHT
     )
     fig.update_traces(textposition="inside", textinfo="percent+label")
-    fig.update(layout_showlegend=False)
+    fig.update_layout(
+        showlegend=False,
+        margin=dict(t=40, r=20, b=24, l=20)
+    )
     return fig
 
 
@@ -143,19 +151,16 @@ def update_graph_pie(n_clicks, date_start, date_end, area):
     State("date-period", "start_date"),
     State("date-period", "end_date"),
     State("dropdown-area", "value"),
-    State("up-available", "value"),
-    State("up-activated", "value"),
-    State("down-available", "value"),
-    State("down-activated", "value")
+    State("dropdown-type", "value"),
+    State("input-available", "value"),
+    State("input-activated", "value")
 )
-def update_graph_reduction(n_clicks, date_start, date_end, area, up_available, up_activated, down_available, down_activated):
-    if date_start is None or date_end is None or area is None:
+def update_graph_reduction(n_clicks, date_start, date_end, area, product_type, available, activated):
+    if date_start is None or date_end is None or area is None or product_type is None:
         return EMPTY_GRAPH
     
-    up_available = up_available or 0
-    up_activated = up_activated or 0
-    down_available = down_available or 0
-    down_activated = down_activated or 0
+    available = available or 0
+    activated = activated or 0
 
     date_start = pd.Timestamp(date_start, tz="UTC")
     date_end = pd.Timestamp(date_end, tz="UTC")
@@ -164,24 +169,29 @@ def update_graph_reduction(n_clicks, date_start, date_end, area, up_available, u
     data = get_co2_reduction(date_start, date_end, area)
     data = data.resample("D").mean()
 
-    total_up = up_available * 1000 * up_activated / 100 * 24
-    total_down = down_available * 1000 * down_activated / 100 * 24
+    total = available * 1000 * activated / 100 * 24
+    if product_type == "up":
+        reduced = data["CO2Diff"] * total / 1000
+    else:
+        reduced = data["CO2Equiv"] * total / 1000
 
-    reduced_up = data["CO2Diff"] * total_up / 1000
-    reduced_down = data["CO2Equiv"] * total_down / 1000
-
-    fig = go.Figure(data=[
-        go.Bar(name="Op", x=data.index, y=reduced_up),
-        go.Bar(name="Ned", x=data.index, y=reduced_down)
-    ])
+    fig = px.bar(
+        x=data.index,
+        y=reduced,
+        title="Din besparelse",
+        labels={
+            "reduced": "Kg CO2 pr. dag"
+        },
+        height=GRAPH_HEIGHT
+    )
+    fig.update_traces(marker_color=ENERGINET_COLORS[0])
     fig.update_layout(
-        barmode="stack",
-        height=GRAPH_HEIGHT,
-        title={"text": "Din besparelse"},
-        yaxis_title="Kg CO2 pr. dag"
+        showlegend=False,
+        margin=dict(t=40, r=10, b=40, l=10),
+        xaxis={"visible": False}
     )
     return fig
 
 
 if __name__ == "__main__":
-    app.run_server(host="0.0.0.0", port=4000, debug=False)
+    app.run_server(host="0.0.0.0", port=4000, debug=True)
