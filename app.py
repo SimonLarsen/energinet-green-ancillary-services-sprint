@@ -1,3 +1,4 @@
+import argparse
 import dash
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
@@ -95,7 +96,8 @@ def kpi_card(id, title, value, unit):
     ], color="success", outline=True)
 
 
-results_content = html.Div(dcc.Loading([
+results_content = dbc.Collapse(dcc.Loading([
+    html.Hr(),
     dbc.Row([
         dbc.Col(kpi_card("kpi-total", "Samlet besparelse", "--", "kg CO2"), md=6, lg=3),
         dbc.Col(kpi_card("kpi-mean", "Gennemsnit", "--", "g CO2/kWh"), md=6, lg=3)
@@ -104,7 +106,7 @@ results_content = html.Div(dcc.Loading([
         dbc.Col(html.Div(dcc.Graph(id="graph-pie"), className="border p-2 rounded"), lg=5),
         dbc.Col(html.Div(dcc.Graph(id="graph-reduction"), className="border p-2 rounded"), lg=7)
     ])
-]))
+]), id="collapse-results", is_open=False)
 
 
 app.layout = dbc.Container(
@@ -118,7 +120,6 @@ app.layout = dbc.Container(
             dbc.Button("Beregn", id="button-submit", color="primary", size="lg"),
             className="my-4 d-flex justify-content-center"
         ),
-        html.Hr(),
         results_content,
         html.Footer(
             html.P("Energinet | Grønne Systemydelser | FlexFordel prototype", className="text-muted my-3"),
@@ -127,6 +128,21 @@ app.layout = dbc.Container(
     ],
     className="p-2"
 )
+
+
+@app.callback(
+    Output("collapse-results", "is_open"),
+    Input("button-submit", "n_clicks"),
+    State("date-period", "start_date"),
+    State("date-period", "end_date"),
+    State("dropdown-area", "value"),
+    State("dropdown-type", "value")
+)
+def update_graph_pie(n_clicks, date_start, date_end, area, product_type):
+    if date_start is None or date_end is None or area is None or product_type is None:
+        return False
+    else:
+        return True
 
 
 @app.callback(
@@ -210,14 +226,18 @@ def update_graph_reduction(n_clicks, date_start, date_end, area, product_type, a
     fig.update_traces(marker_color=PRIMARY_COLOR)
     fig.update_layout(
         showlegend=False,
-        margin=dict(t=40, r=10, b=30, l=10),
-        xaxis={"visible": False}
+        margin=dict(t=40, r=10, b=10, l=10)
     )
+    fig.update_xaxes(title_text="")
 
     kpi_total = "{:d}".format(round(reduced.sum()))
-    kpi_mean = "{:.1f}".format(co2_ref.mean())
+    kpi_mean = "{:d}".format(round(co2_ref.mean()))
     return fig, kpi_total, kpi_mean
 
 
 if __name__ == "__main__":
-    app.run_server(host="0.0.0.0", port=4000, debug=False)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-p", "--port", type=int, default=4000)
+    args = parser.parse_args()
+
+    app.run_server(host="0.0.0.0", port=args.port, debug=False)
