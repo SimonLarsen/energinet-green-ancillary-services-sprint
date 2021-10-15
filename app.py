@@ -74,11 +74,11 @@ form_content = html.Div([
         dbc.Col([
             html.H3("Produkt", className="display-6"),
             dbc.InputGroup([
-                dbc.Input(id="input-available", placeholder="Tilgængelige", type="number", min=0, step=0.01),
+                dbc.Input(id="input-available", placeholder="Tilgængelige", type="number", min=0),
                 dbc.InputGroupText("MW")
             ], className="mb-1"),
             dbc.InputGroup([
-                dbc.Input(id="input-activated", placeholder="Aktiveret", type="number", min=0, max=100, step=0.01),
+                dbc.Input(id="input-activated", placeholder="Aktiveret", type="number", min=0, max=100),
                 dbc.InputGroupText("%")
             ])
         ], md=6, lg=3)
