@@ -18,17 +18,22 @@ EMPTY_GRAPH = {
     "layout": {
         "xaxis": {"visible": False},
         "yaxis": {"visible": False},
-        "paper_bgcolor": "#f0f0f0",
-        "plot_bgcolor": "#f0f0f0",
+        "paper_bgcolor": "white",
+        "plot_bgcolor": "white",
         "height": GRAPH_HEIGHT
     }
 }
 
 PROD_TYPES = ["Kul", "Naturgas", "Atomkraft", "Olie", "Biomasse", "Affald", "Biogas"]
 ENERGINET_COLORS = ["#00A58D", "#09505D", "#FFD424", "#83CCD8", "#008A8B", "#F8AE3C", "#A0C1C2", "#9FCD91", "#CC493E"]
+PRIMARY_COLOR = ENERGINET_COLORS[0]
 PROD_COLOR_MAP = {t: c for t, c in zip(PROD_TYPES, ENERGINET_COLORS[1:8])}
 
-app = dash.Dash(external_stylesheets=[dbc.themes.LUMEN])
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.LUMEN],
+    title="FlexFordel"
+)
 
 form_content = html.Div([
     dbc.Row([
@@ -68,11 +73,11 @@ form_content = html.Div([
         dbc.Col([
             html.H3("Produkt", className="display-6"),
             dbc.InputGroup([
-                dbc.Input(id="input-available", placeholder="Tilgængelige", type="number", min=0, step=0.1),
+                dbc.Input(id="input-available", placeholder="Tilgængelige", type="number", min=0, step=0.01),
                 dbc.InputGroupText("MW")
             ], className="mb-1"),
             dbc.InputGroup([
-                dbc.Input(id="input-activated", placeholder="Aktiveret", type="number", min=0, max=100, step=0.1),
+                dbc.Input(id="input-activated", placeholder="Aktiveret", type="number", min=0, max=100, step=0.01),
                 dbc.InputGroupText("%")
             ])
         ], md=6, lg=3)
@@ -96,8 +101,8 @@ results_content = html.Div(dcc.Loading([
         dbc.Col(kpi_card("kpi-mean", "Gennemsnit", "--", "g CO2/kWh"), md=6, lg=3)
     ], className="justify-content-lg-center text-center mb-3"),
     dbc.Row([
-        dbc.Col(dcc.Graph(id="graph-pie"), lg=5),
-        dbc.Col(dcc.Graph(id="graph-reduction"), lg=7)
+        dbc.Col(html.Div(dcc.Graph(id="graph-pie"), className="border p-2 rounded"), lg=5),
+        dbc.Col(html.Div(dcc.Graph(id="graph-reduction"), className="border p-2 rounded"), lg=7)
     ])
 ]))
 
@@ -129,10 +134,11 @@ app.layout = dbc.Container(
     Input("button-submit", "n_clicks"),
     State("date-period", "start_date"),
     State("date-period", "end_date"),
-    State("dropdown-area", "value")
+    State("dropdown-area", "value"),
+    State("dropdown-type", "value")
 )
-def update_graph_pie(n_clicks, date_start, date_end, area):
-    if date_start is None or date_end is None or area is None:
+def update_graph_pie(n_clicks, date_start, date_end, area, product_type):
+    if date_start is None or date_end is None or area is None or product_type is None:
         return EMPTY_GRAPH
 
     df = get_prod_proportion(
@@ -201,10 +207,10 @@ def update_graph_reduction(n_clicks, date_start, date_end, area, product_type, a
         },
         height=GRAPH_HEIGHT
     )
-    fig.update_traces(marker_color=ENERGINET_COLORS[0])
+    fig.update_traces(marker_color=PRIMARY_COLOR)
     fig.update_layout(
         showlegend=False,
-        margin=dict(t=40, r=10, b=40, l=10),
+        margin=dict(t=40, r=10, b=30, l=10),
         xaxis={"visible": False}
     )
 
@@ -214,4 +220,4 @@ def update_graph_reduction(n_clicks, date_start, date_end, area, product_type, a
 
 
 if __name__ == "__main__":
-    app.run_server(host="0.0.0.0", port=4000, debug=True)
+    app.run_server(host="0.0.0.0", port=4000, debug=False)
