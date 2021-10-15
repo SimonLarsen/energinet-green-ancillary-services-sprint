@@ -13,16 +13,16 @@ from get_co2_equiv import get_co2_reduction
 
 VALID_YEARS = [2017, 2018, 2019, 2020]
 VALID_MONTHS = ["Januar", "Februar", "Marts", "April", "Maj", "Juni", "Juli", "August", "September", "Oktober", "November", "December"]
+GRAPH_HEIGHT = 400
 EMPTY_GRAPH = {
     "layout": {
         "xaxis": {"visible": False},
         "yaxis": {"visible": False},
-        "paper_bgcolor": "white",
-        "plot_bgcolor": "white",
-        "height": 48
+        "paper_bgcolor": "#f0f0f0",
+        "plot_bgcolor": "#f0f0f0",
+        "height": GRAPH_HEIGHT
     }
 }
-GRAPH_HEIGHT = 400
 
 PROD_TYPES = ["Kul", "Naturgas", "Atomkraft", "Olie", "Biomasse", "Affald", "Biogas"]
 ENERGINET_COLORS = ["#00A58D", "#09505D", "#FFD424", "#83CCD8", "#008A8B", "#F8AE3C", "#A0C1C2", "#9FCD91", "#CC493E"]
@@ -79,12 +79,28 @@ form_content = html.Div([
     ])
 ])
 
-results_content = html.Div(
+
+def kpi_card(id, title, value, unit):
+    return dbc.Card([
+        dbc.CardHeader(html.H4(title, className="m-0 card-title")),
+        dbc.CardBody([
+            html.Span(value, id=id, className="h1"),
+            html.Span(unit, className="ml-1 h3 fw-light text-muted")
+        ])
+    ], color="success", outline=True)
+
+
+results_content = html.Div(dcc.Loading([
     dbc.Row([
-        dbc.Col(dcc.Loading(dcc.Graph(id="graph-pie")), lg=5),
-        dbc.Col(dcc.Loading(dcc.Graph(id="graph-reduction")), lg=7)
+        dbc.Col(kpi_card("kpi-total", "Samlet besparelse", "--", "kg CO2"), md=6, lg=3),
+        dbc.Col(kpi_card("kpi-mean", "Gennemsnit", "--", "g CO2/kWh"), md=6, lg=3)
+    ], className="justify-content-lg-center text-center mb-3"),
+    dbc.Row([
+        dbc.Col(dcc.Graph(id="graph-pie"), lg=5),
+        dbc.Col(dcc.Graph(id="graph-reduction"), lg=7)
     ])
-)
+]))
+
 
 app.layout = dbc.Container(
     [
@@ -97,13 +113,14 @@ app.layout = dbc.Container(
             dbc.Button("Beregn", id="button-submit", color="primary", size="lg"),
             className="my-4 d-flex justify-content-center"
         ),
+        html.Hr(),
         results_content,
         html.Footer(
             html.P("Energinet | Grønne Systemydelser | FlexFordel prototype", className="text-muted my-3"),
-            className="border-top"
+            className="mt-3 border-top"
         )
     ],
-    className="p-3"
+    className="p-2"
 )
 
 
@@ -147,6 +164,8 @@ def update_graph_pie(n_clicks, date_start, date_end, area):
 
 @app.callback(
     Output("graph-reduction", "figure"),
+    Output("kpi-total", "children"),
+    Output("kpi-mean", "children"),
     Input("button-submit", "n_clicks"),
     State("date-period", "start_date"),
     State("date-period", "end_date"),
@@ -157,8 +176,8 @@ def update_graph_pie(n_clicks, date_start, date_end, area):
 )
 def update_graph_reduction(n_clicks, date_start, date_end, area, product_type, available, activated):
     if date_start is None or date_end is None or area is None or product_type is None:
-        return EMPTY_GRAPH
-    
+        return EMPTY_GRAPH, "--", "--"
+
     available = available or 0
     activated = activated or 0
 
@@ -169,18 +188,16 @@ def update_graph_reduction(n_clicks, date_start, date_end, area, product_type, a
     data = get_co2_reduction(date_start, date_end, area)
     data = data.resample("D").mean()
 
+    co2_ref = data["CO2Diff"] if product_type == "up" else data["CO2Equiv"]
     total = available * 1000 * activated / 100 * 24
-    if product_type == "up":
-        reduced = data["CO2Diff"] * total / 1000
-    else:
-        reduced = data["CO2Equiv"] * total / 1000
+    reduced = co2_ref * total / 1000
 
     fig = px.bar(
         x=data.index,
         y=reduced,
         title="Din besparelse",
         labels={
-            "reduced": "Kg CO2 pr. dag"
+            "y": "Kg CO2 pr. dag"
         },
         height=GRAPH_HEIGHT
     )
@@ -190,7 +207,10 @@ def update_graph_reduction(n_clicks, date_start, date_end, area, product_type, a
         margin=dict(t=40, r=10, b=40, l=10),
         xaxis={"visible": False}
     )
-    return fig
+
+    kpi_total = "{:d}".format(round(reduced.sum()))
+    kpi_mean = "{:.1f}".format(co2_ref.mean())
+    return fig, kpi_total, kpi_mean
 
 
 if __name__ == "__main__":
