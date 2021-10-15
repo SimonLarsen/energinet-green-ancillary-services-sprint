@@ -1,3 +1,4 @@
+import argparse
 import dash
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
@@ -18,17 +19,22 @@ EMPTY_GRAPH = {
     "layout": {
         "xaxis": {"visible": False},
         "yaxis": {"visible": False},
-        "paper_bgcolor": "#f0f0f0",
-        "plot_bgcolor": "#f0f0f0",
+        "paper_bgcolor": "white",
+        "plot_bgcolor": "white",
         "height": GRAPH_HEIGHT
     }
 }
 
 PROD_TYPES = ["Kul", "Naturgas", "Atomkraft", "Olie", "Biomasse", "Affald", "Biogas"]
 ENERGINET_COLORS = ["#00A58D", "#09505D", "#FFD424", "#83CCD8", "#008A8B", "#F8AE3C", "#A0C1C2", "#9FCD91", "#CC493E"]
+PRIMARY_COLOR = ENERGINET_COLORS[0]
 PROD_COLOR_MAP = {t: c for t, c in zip(PROD_TYPES, ENERGINET_COLORS[1:8])}
 
-app = dash.Dash(external_stylesheets=[dbc.themes.LUMEN])
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.LUMEN],
+    title="FlexFordel"
+)
 
 form_content = html.Div([
     dbc.Row([
@@ -68,11 +74,11 @@ form_content = html.Div([
         dbc.Col([
             html.H3("Produkt", className="display-6"),
             dbc.InputGroup([
-                dbc.Input(id="input-available", placeholder="Tilgængelige", type="number", min=0, step=0.1),
+                dbc.Input(id="input-available", placeholder="Tilgængelige", type="number", min=0, step=0.01),
                 dbc.InputGroupText("MW")
             ], className="mb-1"),
             dbc.InputGroup([
-                dbc.Input(id="input-activated", placeholder="Aktiveret", type="number", min=0, max=100, step=0.1),
+                dbc.Input(id="input-activated", placeholder="Aktiveret", type="number", min=0, max=100, step=0.01),
                 dbc.InputGroupText("%")
             ])
         ], md=6, lg=3)
@@ -90,16 +96,17 @@ def kpi_card(id, title, value, unit):
     ], color="success", outline=True)
 
 
-results_content = html.Div(dcc.Loading([
+results_content = dbc.Collapse(dcc.Loading([
+    html.Hr(),
     dbc.Row([
         dbc.Col(kpi_card("kpi-total", "Samlet besparelse", "--", "kg CO2"), md=6, lg=3),
         dbc.Col(kpi_card("kpi-mean", "Gennemsnit", "--", "g CO2/kWh"), md=6, lg=3)
     ], className="justify-content-lg-center text-center mb-3"),
     dbc.Row([
-        dbc.Col(dcc.Graph(id="graph-pie"), lg=5),
-        dbc.Col(dcc.Graph(id="graph-reduction"), lg=7)
+        dbc.Col(html.Div(dcc.Graph(id="graph-pie"), className="border p-2 rounded"), lg=5),
+        dbc.Col(html.Div(dcc.Graph(id="graph-reduction"), className="border p-2 rounded"), lg=7)
     ])
-]))
+]), id="collapse-results", is_open=False)
 
 
 app.layout = dbc.Container(
@@ -113,7 +120,6 @@ app.layout = dbc.Container(
             dbc.Button("Beregn", id="button-submit", color="primary", size="lg"),
             className="my-4 d-flex justify-content-center"
         ),
-        html.Hr(),
         results_content,
         html.Footer(
             html.P("Energinet | Grønne Systemydelser | FlexFordel prototype", className="text-muted my-3"),
@@ -125,14 +131,30 @@ app.layout = dbc.Container(
 
 
 @app.callback(
+    Output("collapse-results", "is_open"),
+    Input("button-submit", "n_clicks"),
+    State("date-period", "start_date"),
+    State("date-period", "end_date"),
+    State("dropdown-area", "value"),
+    State("dropdown-type", "value")
+)
+def update_graph_pie(n_clicks, date_start, date_end, area, product_type):
+    if date_start is None or date_end is None or area is None or product_type is None:
+        return False
+    else:
+        return True
+
+
+@app.callback(
     Output("graph-pie", "figure"),
     Input("button-submit", "n_clicks"),
     State("date-period", "start_date"),
     State("date-period", "end_date"),
-    State("dropdown-area", "value")
+    State("dropdown-area", "value"),
+    State("dropdown-type", "value")
 )
-def update_graph_pie(n_clicks, date_start, date_end, area):
-    if date_start is None or date_end is None or area is None:
+def update_graph_pie(n_clicks, date_start, date_end, area, product_type):
+    if date_start is None or date_end is None or area is None or product_type is None:
         return EMPTY_GRAPH
 
     df = get_prod_proportion(
@@ -201,17 +223,21 @@ def update_graph_reduction(n_clicks, date_start, date_end, area, product_type, a
         },
         height=GRAPH_HEIGHT
     )
-    fig.update_traces(marker_color=ENERGINET_COLORS[0])
+    fig.update_traces(marker_color=PRIMARY_COLOR)
     fig.update_layout(
         showlegend=False,
-        margin=dict(t=40, r=10, b=40, l=10),
-        xaxis={"visible": False}
+        margin=dict(t=40, r=10, b=10, l=10)
     )
+    fig.update_xaxes(title_text="")
 
     kpi_total = "{:d}".format(round(reduced.sum()))
-    kpi_mean = "{:.1f}".format(co2_ref.mean())
+    kpi_mean = "{:d}".format(round(co2_ref.mean()))
     return fig, kpi_total, kpi_mean
 
 
 if __name__ == "__main__":
-    app.run_server(host="0.0.0.0", port=4000, debug=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-p", "--port", type=int, default=4000)
+    args = parser.parse_args()
+
+    app.run_server(host="0.0.0.0", port=args.port, debug=False)
